@@ -3,378 +3,360 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Reflection;
+using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
 
 namespace daw.Collections {
-    public class SyncList<T>: BindingList<T>, IBindingListView {
+	public class SyncList<T>: BindingList<T>, IBindingListView {
 
-        // Invoke stuff for threaded forms
-        private ISynchronizeInvoke _SyncObject;
-        private Action<ListChangedEventArgs> _FireEventAction;
-        
-        private List<T> originalListValue = new List<T>( );
-        public List<T> OriginalList {
-            get { return originalListValue; }
-        }
+		// Invoke stuff for threaded forms
+		private readonly ISynchronizeInvoke _syncObject;
+		private Action<ListChangedEventArgs> _fireEventAction;
 
-        public SyncList( )
-            : this( null ) {
-        }
+		private readonly List<T> _originalListValue = new List<T>( );
+		public List<T> OriginalList {
+			get { return _originalListValue; }
+		}
 
-        public SyncList( ISynchronizeInvoke syncObject, IList<T> values = null ) {
-            if( values != null ) {
-                foreach( T value in values ) {
-                    this.Items.Add( value );
-                }
-            }
-            _SyncObject = syncObject;
-            _FireEventAction = FireEvent;
-        }
+		public SyncList( )
+			: this( null ) {
+		}
 
-        public bool SupportsAdvancedSorting {
-            get { return false; }
-        }
+		public SyncList( ISynchronizeInvoke syncObject, IEnumerable<T> values = null ) {
+			if( values != null ) {
+				foreach( T value in values ) {
+					this.Items.Add( value );
+				}
+			}
+			_syncObject = syncObject;
+			_fireEventAction = FireEvent;
+		}
 
-        public ListSortDescriptionCollection SortDescriptions {
-            get { return null; }
-        }
+		public bool SupportsAdvancedSorting {
+			get { return false; }
+		}
 
-        public void ApplySort( ListSortDescriptionCollection sorts ) {
-            throw new NotSupportedException( );
-        }
+		public ListSortDescriptionCollection SortDescriptions {
+			get { return null; }
+		}
 
-        private void FireEvent( ListChangedEventArgs args ) {
-            base.OnListChanged( args );
-        }
+		public void ApplySort( ListSortDescriptionCollection sorts ) {
+			throw new NotSupportedException( );
+		}
 
-        // Sort Stuff
-        private bool m_Sorted = false;
-        private ListSortDirection m_SortDirection = ListSortDirection.Ascending;
-        private PropertyDescriptor m_SortProperty = null;
+		private void FireEvent( ListChangedEventArgs args ) {
+			base.OnListChanged( args );
+		}
 
-        protected override bool SupportsSortingCore {
-            get { return true; }
-        }
+		// Sort Stuff
+		private const bool Sorted = false;
+		private ListSortDirection _sortDirection = ListSortDirection.Ascending;
+		private PropertyDescriptor _sortProperty = null;
 
-        protected override int FindCore( PropertyDescriptor prop, object key ) {
-            if( null != key ) {
-                PropertyInfo propInfo = typeof( T ).GetProperty( prop.Name );
-                for( int n = 0; n < Count; ++n ) {
-                    if( propInfo.GetValue( Items[n], null ).Equals( key ) ) {
-                        return n;
-                    }
-                }
-            }
-            return -1;
-        }
+		protected override bool SupportsSortingCore {
+			get { return true; }
+		}
 
-        public int Find( string property, object key ) {
-            PropertyDescriptorCollection properties = TypeDescriptor.GetProperties( typeof( T ) );
-            PropertyDescriptor prop = properties.Find( property, true );
-            if( null == prop ) {
-                return -1;
-            }
-            return FindCore( prop, key );
-        }
+		protected override int FindCore( PropertyDescriptor prop, object key ) {
+			if( null == key ) {
+				return -1;
+			}
+			var propInfo = typeof( T ).GetProperty( prop.Name );
+			for( var n = 0; n < Count; ++n ) {
+				if( propInfo.GetValue( Items[n], null ).Equals( key ) ) {
+					return n;
+				}
+			}
+			return -1;
+		}
 
-        public bool SupportsFiltering
-        {
-            get { return true; }
-        }
+		public int Find( string property, object key ) {
+			var properties = TypeDescriptor.GetProperties( typeof( T ) );
+			var prop = properties.Find( property, true );
+			if( null == prop ) {
+				return -1;
+			}
+			return FindCore( prop, key );
+		}
 
-        public void RemoveFilter()
-        {
-            if (Filter != null) Filter = null;
-        }
+		public bool SupportsFiltering {
+			get { return true; }
+		}
 
-        private string filterValue = null;
+		public void RemoveFilter( ) {
+			Filter = null;
+		}
 
-        public string Filter {
-            get { return filterValue; }
-            set {
-                if( filterValue == value ) {
-                    return;
-                }
+		private string _filterValue = null;
 
-                // If the value is not null or empty, but doesn't
-                // match expected format, throw an exception.
-                if( !String.IsNullOrEmpty( value ) && !Regex.IsMatch( value, BuildRegExForFilterFormat( ), RegexOptions.Singleline ) ) {
-                    throw new ArgumentException( "Filter is not in the format: propName[<>=]'value'." );
-                }
-                //Turn off list-changed events.
-                RaiseListChangedEvents = false;
+		public string Filter {
+			get { return _filterValue; }
+			set {
+				if( _filterValue == value ) {
+					return;
+				}
 
-                // If the value is null or empty, reset list.
-                if( String.IsNullOrEmpty( value ) ) {
-                    ResetList( );
-                } else {
-                    int count = 0;
-                    string[] matches = value.Split( new string[] { " AND " }, StringSplitOptions.RemoveEmptyEntries );
+				// If the value is not null or empty, but doesn't
+				// match expected format, throw an exception.
+				if( !String.IsNullOrEmpty( value ) && !Regex.IsMatch( value, BuildRegExForFilterFormat( ), RegexOptions.Singleline ) ) {
+					throw new ArgumentException( "Filter is not in the format: propName[<>=]'value'." );
+				}
+				//Turn off list-changed events.
+				RaiseListChangedEvents = false;
 
-                    while( count < matches.Length ) {
-                        String filterPart = matches[count].ToString( );
+				// If the value is null or empty, reset list.
+				if( String.IsNullOrEmpty( value ) ) {
+					ResetList( );
+				} else {
+					var count = 0;
+					var matches = value.Split( new string[] { " AND " }, StringSplitOptions.RemoveEmptyEntries );
 
-                        // Check to see if the filter was set previously.
-                        // Also, check if current filter is a subset of 
-                        // the previous filter.
-                        if( !String.IsNullOrEmpty( filterValue ) && !value.Contains( filterValue ) ) {
-                            ResetList( );
-                        }
-                        // Parse and apply the filter.
-                        SingleFilterInfo filterInfo = ParseFilter( filterPart );
-                        ApplyFilter( filterInfo );
-                        ++count;
-                    }
-                }
-                // Set the filter value and turn on list changed events.
-                filterValue = value;
-                RaiseListChangedEvents = true;
-                OnListChanged( new ListChangedEventArgs( ListChangedType.Reset, -1 ) );
-            }
-        }
+					while( count < matches.Length ) {
+						var filterPart = matches[count].ToString( );
 
-        protected override bool IsSortedCore {
-            get { return m_Sorted; }
-        }
+						// Check to see if the filter was set previously.
+						// Also, check if current filter is a subset of 
+						// the previous filter.
+						if( !String.IsNullOrEmpty( _filterValue ) && !value.Contains( _filterValue ) ) {
+							ResetList( );
+						}
+						// Parse and apply the filter.
+						var filterInfo = ParseFilter( filterPart );
+						ApplyFilter( filterInfo );
+						++count;
+					}
+				}
+				// Set the filter value and turn on list changed events.
+				_filterValue = value;
+				RaiseListChangedEvents = true;
+				OnListChanged( new ListChangedEventArgs( ListChangedType.Reset, -1 ) );
+			}
+		}
 
-        protected override ListSortDirection SortDirectionCore {
-            get { return m_SortDirection; }
-        }
+		protected override bool IsSortedCore {
+			get { return Sorted; }
+		}
 
-        protected override PropertyDescriptor SortPropertyCore {
-            get { return m_SortProperty; }
-        }
+		protected override ListSortDirection SortDirectionCore {
+			get { return _sortDirection; }
+		}
 
-        protected override void ApplySortCore( PropertyDescriptor prop, ListSortDirection direction ) {
-            m_SortDirection = direction;
-            m_SortProperty = prop;
-            var listRef = this.Items as List<T>;
-            if( listRef == null ) {
-                return;
-            }
-            var comparer = new SortComparer<T>( prop, direction );
+		protected override PropertyDescriptor SortPropertyCore {
+			get { return _sortProperty; }
+		}
 
-            listRef.Sort( comparer );
+		protected override void ApplySortCore( PropertyDescriptor prop, ListSortDirection direction ) {
+			_sortDirection = direction;
+			_sortProperty = prop;
+			var listRef = this.Items as List<T>;
+			if( null == listRef ) {
+				return;
+			}
+			var comparer = new SortComparer<T>( prop, direction );
 
-            OnListChanged( new ListChangedEventArgs( ListChangedType.Reset, -1 ) );
-        }
+			listRef.Sort( comparer );
 
-        private void ResetList( ) {
-            this.ClearItems( );
-            foreach( T t in originalListValue ) {
-                this.Items.Add( t );
-            }
+			OnListChanged( new ListChangedEventArgs( ListChangedType.Reset, -1 ) );
+		}
 
-            if( IsSortedCore ) {
-                ApplySortCore( SortPropertyCore, SortDirectionCore );
-            }
-        }
+		private void ResetList( ) {
+			this.ClearItems( );
+			foreach( var t in _originalListValue ) {
+				this.Items.Add( t );
+			}
 
-        protected override void OnListChanged( ListChangedEventArgs e ) {
-            // If the list is reset, check for a filter. If a filter 
-            // is applied don't allow items to be added to the list.
-            if( e.ListChangedType == ListChangedType.Reset ) {
-                if( Filter == null || Filter == String.Empty ) {
-                    AllowNew = true;
-                } else {
-                    AllowNew = false;
-                }
-            }
-            // Add the new item to the original list.
-            if( e.ListChangedType == ListChangedType.ItemAdded ) {
-                OriginalList.Add( this[e.NewIndex] );
-                if( !String.IsNullOrEmpty( Filter ) )
-                //if (Filter == null || Filter == "")
-                {
-                    string cachedFilter = this.Filter;
-                    this.Filter = String.Empty;
-                    this.Filter = cachedFilter;
-                }
-            }
-            // Remove the new item from the original list.
-            if( e.ListChangedType == ListChangedType.ItemDeleted ) {
-                OriginalList.RemoveAt( e.NewIndex );
-            }            
+			if( IsSortedCore && null != SortPropertyCore ) {
+				ApplySortCore( SortPropertyCore, SortDirectionCore );
+			}
+		}
 
-            if( _SyncObject == null ) {
-                base.OnListChanged( e );
-                FireEvent( e );
-            } else {
-                if( null != _SyncObject ) {
-                    _SyncObject.Invoke( new Action( ( ) => {
-                        base.OnListChanged( e );
-                        FireEvent( e );
-                    } ), new object[] { } );
-                }
-            }   
-        }
+		protected override void OnListChanged( ListChangedEventArgs e ) {
+			// If the list is reset, check for a filter. If a filter 
+			// is applied don't allow items to be added to the list.
+			if( e.ListChangedType == ListChangedType.Reset ) {
+				AllowNew = string.IsNullOrEmpty( Filter );
+			}
+			// Add the new item to the original list.
+			if( e.ListChangedType == ListChangedType.ItemAdded ) {
+				OriginalList.Add( this[e.NewIndex] );
+				if( !String.IsNullOrEmpty( Filter ) ) {
+					var cachedFilter = this.Filter;
+					this.Filter = string.Empty;
+					this.Filter = cachedFilter;
+				}
+			}
+			// Remove the new item from the original list.
+			if( e.ListChangedType == ListChangedType.ItemDeleted ) {
+				OriginalList.RemoveAt( e.NewIndex );
+			}
 
-        public static String BuildRegExForFilterFormat( ) {
-            StringBuilder regex = new StringBuilder( );
+			if( null == _syncObject ) {
+				base.OnListChanged( e );
+				FireEvent( e );
+			} else if( null != _syncObject ) {
+				_syncObject.Invoke( new Action( ( ) => {
+					base.OnListChanged( e );
+					FireEvent( e );
+				} ), new object[] { } );
+			}
+		}
 
-            // Look for optional literal brackets, 
-            // followed by word characters or space.
-            regex.Append( @"\[?[\w\s]+\]?\s?" );
+		public static String BuildRegExForFilterFormat( ) {
+			var regex = new StringBuilder( );
 
-            // Add the operators: > < or =.
-            regex.Append( @"[><=]" );
+			// Look for optional literal brackets, 
+			// followed by word characters or space.
+			regex.Append( @"\[?[\w\s]+\]?\s?" );
 
-            //Add optional space followed by optional quote and
-            // any character followed by the optional quote.
-            regex.Append( @"\s?'?.+'?" );
+			// Add the operators: > < or =.
+			regex.Append( @"[><=]" );
 
-            return regex.ToString( );
-        }
+			//Add optional space followed by optional quote and
+			// any character followed by the optional quote.
+			regex.Append( @"\s?'?.+'?" );
 
-        internal void ApplyFilter( SingleFilterInfo filterParts ) {
-            List<T> results;
+			return regex.ToString( );
+		}
 
-            // Check to see if the property type we are filtering by implements
-            // the IComparable interface.
-            Type interfaceType =
-                TypeDescriptor.GetProperties( typeof( T ) )[filterParts.PropName]
-                .PropertyType.GetInterface( "IComparable" );
+		internal void ApplyFilter( SingleFilterInfo filterParts ) {
 
-            if( interfaceType == null )
-                throw new InvalidOperationException( "Filtered property" +
-                " must implement IComparable." );
+			// Check to see if the property type we are filtering by implements
+			// the IComparable interface.
+			var interfaceType = TypeDescriptor.GetProperties( typeof( T ) )[filterParts.PropName].PropertyType.GetInterface( "IComparable" );
 
-            results = new List<T>( );
+			if( null == interfaceType ) {
+				throw new InvalidOperationException( "Filtered property must implement IComparable." );
+			}
 
-            // Check each value and add to the results list.
-            foreach( T item in this ) {
-                if( filterParts.PropDesc.GetValue( item ) != null ) {
-                    IComparable compareValue =
-                        filterParts.PropDesc.GetValue( item ) as IComparable;
-                    int result =
-                        compareValue.CompareTo( filterParts.CompareValue );
-                    if( filterParts.OperatorValue ==
-                        FilterOperator.EqualTo && result == 0 )
-                        results.Add( item );
-                    if( filterParts.OperatorValue ==
-                        FilterOperator.GreaterThan && result > 0 )
-                        results.Add( item );
-                    if( filterParts.OperatorValue ==
-                        FilterOperator.LessThan && result < 0 )
-                        results.Add( item );
-                }
-            }
-            this.ClearItems( );
-            foreach( T itemFound in results )
-                this.Add( itemFound );
-        }
+			var results = new List<T>( );
 
-        internal SingleFilterInfo ParseFilter( string filterPart ) {
-            SingleFilterInfo filterInfo = new SingleFilterInfo( );
-            filterInfo.OperatorValue = DetermineFilterOperator( filterPart );
+			// Check each value and add to the results list.
+			foreach( var item in this ) {
+				if( null == filterParts.PropDesc.GetValue( item ) ) {
+					continue;
+				}
+				var compareValue = filterParts.PropDesc.GetValue( item ) as IComparable;
+				if( null == compareValue && null == filterParts.CompareValue ) {
+					continue;
+				}
+				var result = compareValue.CompareTo( filterParts.CompareValue );
+				if( filterParts.OperatorValue == FilterOperator.EqualTo && result == 0 ) {
+					results.Add( item );
+				} else if( filterParts.OperatorValue == FilterOperator.GreaterThan && result > 0 ) {
+					results.Add( item );
+				} else if( filterParts.OperatorValue == FilterOperator.LessThan && result < 0 ) {
+					results.Add( item );
+				}
+			}
+			this.ClearItems( );
+			foreach( var itemFound in results ) {
+				this.Add( itemFound );
+			}
 
-            string[] filterStringParts =
-                filterPart.Split( new char[] { (char)filterInfo.OperatorValue } );
+		}
 
-            filterInfo.PropName =
-                filterStringParts[0].Replace( "[", "" ).
-                Replace( "]", "" ).Replace( " AND ", "" ).Trim( );
+		internal SingleFilterInfo ParseFilter( string filterPart ) {
+			Debug.Assert( string.IsNullOrEmpty( filterPart ), "filterPart cannot be null" );
 
-            // Get the property descriptor for the filter property name.
-            PropertyDescriptor filterPropDesc =
-                TypeDescriptor.GetProperties( typeof( T ) )[filterInfo.PropName];
+			var filterInfo = new SingleFilterInfo( );
+			filterInfo.OperatorValue = DetermineFilterOperator( filterPart );
 
-            // Convert the filter compare value to the property type.
-            if( filterPropDesc == null )
-                throw new InvalidOperationException( "Specified property to " +
-                    "filter " + filterInfo.PropName +
-                    " on does not exist on type: " + typeof( T ).Name );
+			var filterStringParts = null == filterPart ? string.Empty.Split( ) : filterPart.Split( new char[] { (char)filterInfo.OperatorValue } );
 
-            filterInfo.PropDesc = filterPropDesc;
+			filterInfo.PropName = filterStringParts[0].Replace( "[", "" ).Replace( "]", "" ).Replace( " AND ", "" ).Trim( );
 
-            string comparePartNoQuotes = StripOffQuotes( filterStringParts[1] );
-            try {
-                TypeConverter converter =
-                    TypeDescriptor.GetConverter( filterPropDesc.PropertyType );
-                filterInfo.CompareValue =
-                    converter.ConvertFromString( comparePartNoQuotes );
-            } catch( NotSupportedException ) {
-                throw new InvalidOperationException( "Specified filter" +
-                    "value " + comparePartNoQuotes + " can not be converted" +
-                    "from string. Implement a type converter for " +
-                    filterPropDesc.PropertyType.ToString( ) );
-            }
-            return filterInfo;
-        }
+			// Get the property descriptor for the filter property name.
+			var filterPropDesc = TypeDescriptor.GetProperties( typeof( T ) )[filterInfo.PropName];
 
-        internal FilterOperator DetermineFilterOperator( string filterPart ) {
-            // Determine the filter's operator.
-            if( Regex.IsMatch( filterPart, "[^>^<]=" ) )
-                return FilterOperator.EqualTo;
-            else if( Regex.IsMatch( filterPart, "<[^>^=]" ) )
-                return FilterOperator.LessThan;
-            else if( Regex.IsMatch( filterPart, "[^<]>[^=]" ) )
-                return FilterOperator.GreaterThan;
-            else
-                return FilterOperator.None;
-        }
+			// Convert the filter compare value to the property type.
+			if( null == filterPropDesc ) {
+				throw new InvalidOperationException( string.Format( "Specified property to filter {0} on does not exist on type: {1}", filterInfo.PropName, typeof( T ).Name ) );
+			}
+			filterInfo.PropDesc = filterPropDesc;
 
-        internal static string StripOffQuotes( string filterPart ) {
-            // Strip off quotes in compare value if they are present.
-            if( Regex.IsMatch( filterPart, "'.+'" ) ) {
-                int quote = filterPart.IndexOf( '\'' );
-                filterPart = filterPart.Remove( quote, 1 );
-                quote = filterPart.LastIndexOf( '\'' );
-                filterPart = filterPart.Remove( quote, 1 );
-                filterPart = filterPart.Trim( );
-            }
-            return filterPart;
-        }
-    }
+			var comparePartNoQuotes = StripOffQuotes( filterStringParts[1] );
+			try {
+				TypeConverter converter = TypeDescriptor.GetConverter( filterPropDesc.PropertyType );
+				filterInfo.CompareValue = converter.ConvertFromString( comparePartNoQuotes );
+			} catch( NotSupportedException ) {
+				throw new InvalidOperationException( string.Format( "Specified filter value {0} can not be converted from string. Implement a type converter for {1}", comparePartNoQuotes, filterPropDesc.PropertyType.ToString( ) ) );
+			}
+			return filterInfo;
+		}
 
-    internal class SortComparer<T>: IComparer<T> {
-        private PropertyDescriptor m_PropDesc = null;
-        private ListSortDirection m_Direction = ListSortDirection.Ascending;
+		internal FilterOperator DetermineFilterOperator( string filterPart ) {
+			// Determine the filter's operator.
+			if( Regex.IsMatch( filterPart, "[^>^<]=" ) ) {
+				return FilterOperator.EqualTo;
+			} else if( Regex.IsMatch( filterPart, "<[^>^=]" ) ) {
+				return FilterOperator.LessThan;
+			} else if( Regex.IsMatch( filterPart, "[^<]>[^=]" ) ) {
+				return FilterOperator.GreaterThan;
+			}
+			return FilterOperator.None;
+		}
 
-        public SortComparer( PropertyDescriptor propDesc, ListSortDirection direction ) {
-            m_PropDesc = propDesc;
-            m_Direction = direction;
-        }
+		internal static string StripOffQuotes( string filterPart ) {
+			// Strip off quotes in compare value if they are present.
+			if( !Regex.IsMatch( filterPart, "'.+'" ) ) {
+				return filterPart;
+			}
+			var quote = filterPart.IndexOf( '\'' );
+			filterPart = filterPart.Remove( quote, 1 );
+			quote = filterPart.LastIndexOf( '\'' );
+			filterPart = filterPart.Remove( quote, 1 );
+			filterPart = filterPart.Trim( );
+			return filterPart;
+		}
+	}
 
-        int IComparer<T>.Compare( T x, T y ) {
-            return CompareValues( x, y, m_Direction );
-        }
+	internal class SortComparer<T>: IComparer<T> {
+		private PropertyDescriptor _propDesc = null;
+		private readonly ListSortDirection _direction = ListSortDirection.Ascending;
 
-        private int CompareValues( T xValue, T yValue, ListSortDirection direction ) {
-            int retValue = 0;
-            if( xValue is IComparable ) {   //can ask the x value
-                retValue = ((IComparable)xValue).CompareTo( yValue );
-            } else if( yValue is IComparable ) {    //can ask the y value
-                retValue = ((IComparable)yValue).CompareTo( xValue );
-            } else if( !xValue.Equals( yValue ) ) { //not comparable, compare string representations
-                retValue = xValue.ToString( ).CompareTo( yValue.ToString( ) );
-            }
+		public SortComparer( PropertyDescriptor propDesc, ListSortDirection direction ) {
+			_propDesc = propDesc;
+			_direction = direction;
+		}
 
-            if( ListSortDirection.Descending == direction ) {
-                retValue *= -1;
-            }
+		public int Compare( T x, T y ) {
+			return CompareValues( x, y, _direction );
+		}
 
-            return retValue;
-        }
-    }
+		private static int CompareValues( T xValue, T yValue, ListSortDirection direction ) {
+			int retValue = 0;
+			if( xValue is IComparable ) {   //can ask the x value
+				retValue = ((IComparable)xValue).CompareTo( yValue );
+			} else if( yValue is IComparable ) {    //can ask the y value
+				retValue = ((IComparable)yValue).CompareTo( xValue );
+			} else if( !xValue.Equals( yValue ) ) { //not comparable, compare string representations
+				retValue = System.String.Compare( xValue.ToString( ), yValue.ToString( ), System.StringComparison.InvariantCultureIgnoreCase );
+			}
+
+			if( ListSortDirection.Descending == direction ) {
+				retValue *= -1;
+			}
+
+			return retValue;
+		}
+	}
 
 
-    public struct SingleFilterInfo {
-        internal string PropName;
-        internal PropertyDescriptor PropDesc;
-        internal Object CompareValue;
-        internal FilterOperator OperatorValue;
-    }
+	public struct SingleFilterInfo {
+		internal string PropName;
+		internal PropertyDescriptor PropDesc;
+		internal Object CompareValue;
+		internal FilterOperator OperatorValue;
+	}
 
-    // Enum to hold filter operators. The chars 
-    // are converted to their integer values.
-    public enum FilterOperator {
-        EqualTo = '=',
-        LessThan = '<',
-        GreaterThan = '>',
-        None = ' '
-    }
+	// Enum to hold filter operators. The chars 
+	// are converted to their integer values.
+	public enum FilterOperator {
+		EqualTo = '=',
+		LessThan = '<',
+		GreaterThan = '>',
+		None = ' '
+	}
 
 }
