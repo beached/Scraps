@@ -331,7 +331,7 @@ namespace daw.Collections {
 			} else if( yValue is IComparable ) {    //can ask the y value
 				retValue = ((IComparable)yValue).CompareTo( xValue );
 			} else if( !xValue.Equals( yValue ) ) { //not comparable, compare string representations
-				retValue = System.String.Compare( xValue.ToString( ), yValue.ToString( ), System.StringComparison.InvariantCultureIgnoreCase );
+				retValue = System.String.Compare( xValue.ToString( ), yValue.ToString( ), System.StringComparison.OrdinalIgnoreCase );
 			}
 
 			if( ListSortDirection.Descending == direction ) {
