@@ -1,6 +1,7 @@
 ﻿// Quickly pulled this togethor from several sources and myself to get a databinding class that automatically invokes and also support filtering and searching.  May not fully work
 // 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -19,10 +20,10 @@ namespace daw.Collections {
 			get { return _originalListValue; }
 		}
 
-		public SyncList( )
-			: this( null ) {
+		public SyncList( ): this( null ) {
 		}
 
+		
 		public SyncList( ISynchronizeInvoke syncObject, IEnumerable<T> values = null ) {
 			if( values != null ) {
 				foreach( T value in values ) {
@@ -33,6 +34,12 @@ namespace daw.Collections {
 			_fireEventAction = FireEvent;
 		}
 
+
+		// Sort Stuff
+		private bool _isSorted = false;
+		private ListSortDirection _sortDirection = ListSortDirection.Ascending;
+		private PropertyDescriptor _sortProperty = null;
+
 		public bool SupportsAdvancedSorting {
 			get { return false; }
 		}
@@ -41,21 +48,51 @@ namespace daw.Collections {
 			get { return null; }
 		}
 
+		protected override ListSortDirection SortDirectionCore {
+			get { return _sortDirection; }
+		}
+
+		protected override PropertyDescriptor SortPropertyCore {
+			get { return _sortProperty; }
+		}
+
+		protected override bool IsSortedCore {
+			get { return _isSorted; }
+		}
+
+		protected override void RemoveSortCore( ) {
+			base.RemoveSortCore( );
+			_isSorted = false;
+			_sortProperty = null;
+		}
+
 		public void ApplySort( ListSortDescriptionCollection sorts ) {
 			throw new NotSupportedException( );
 		}
 
-		private void FireEvent( ListChangedEventArgs args ) {
-			base.OnListChanged( args );
-		}
-
-		// Sort Stuff
-		private const bool Sorted = false;
-		private ListSortDirection _sortDirection = ListSortDirection.Ascending;
-		private PropertyDescriptor _sortProperty = null;
-
 		protected override bool SupportsSortingCore {
 			get { return true; }
+		}
+
+		protected override void ApplySortCore( PropertyDescriptor prop, ListSortDirection direction ) {
+			_sortDirection = direction;
+			_sortProperty = prop;
+
+			var listRef = this.Items as List<T>;
+			if( null == listRef ) {
+				return;
+			}
+			_isSorted = true;
+			var comparer = new SortComparer<T>( _sortProperty, _sortDirection );
+
+			listRef.Sort( comparer );
+
+			OnListChanged( new ListChangedEventArgs( ListChangedType.Reset, -1 ) );
+		}
+
+
+		private void FireEvent( ListChangedEventArgs args ) {
+			base.OnListChanged( args );
 		}
 
 		protected override int FindCore( PropertyDescriptor prop, object key ) {
@@ -132,32 +169,6 @@ namespace daw.Collections {
 				RaiseListChangedEvents = true;
 				OnListChanged( new ListChangedEventArgs( ListChangedType.Reset, -1 ) );
 			}
-		}
-
-		protected override bool IsSortedCore {
-			get { return Sorted; }
-		}
-
-		protected override ListSortDirection SortDirectionCore {
-			get { return _sortDirection; }
-		}
-
-		protected override PropertyDescriptor SortPropertyCore {
-			get { return _sortProperty; }
-		}
-
-		protected override void ApplySortCore( PropertyDescriptor prop, ListSortDirection direction ) {
-			_sortDirection = direction;
-			_sortProperty = prop;
-			var listRef = this.Items as List<T>;
-			if( null == listRef ) {
-				return;
-			}
-			var comparer = new SortComparer<T>( prop, direction );
-
-			listRef.Sort( comparer );
-
-			OnListChanged( new ListChangedEventArgs( ListChangedType.Reset, -1 ) );
 		}
 
 		private void ResetList( ) {
@@ -257,7 +268,7 @@ namespace daw.Collections {
 		}
 
 		internal SingleFilterInfo ParseFilter( string filterPart ) {
-			Debug.Assert( string.IsNullOrEmpty( filterPart ), "filterPart cannot be null" );
+			Debug.Assert( !string.IsNullOrEmpty( filterPart ), "filterPart cannot be null" );
 
 			var filterInfo = new SingleFilterInfo( );
 			filterInfo.OperatorValue = DetermineFilterOperator( filterPart );
@@ -311,30 +322,44 @@ namespace daw.Collections {
 		}
 	}
 
-	internal class SortComparer<T>: IComparer<T> {
-		private PropertyDescriptor _propDesc = null;
+	internal class SortComparer<T>: Comparer<T> {
+		private readonly PropertyDescriptor _propDesc;		
 		private readonly ListSortDirection _direction = ListSortDirection.Ascending;
 
 		public SortComparer( PropertyDescriptor propDesc, ListSortDirection direction ) {
+			if( propDesc.ComponentType != typeof( T ) ) {
+				throw new MissingMemberException( typeof( T ).Name, propDesc.Name );
+			}
 			_propDesc = propDesc;
 			_direction = direction;
+
 		}
 
-		public int Compare( T x, T y ) {
-			return CompareValues( x, y, _direction );
-		}
-
-		private static int CompareValues( T xValue, T yValue, ListSortDirection direction ) {
+		public override int Compare( T x, T y ) {
+			var xValue = _propDesc.GetValue( x );
+			var yValue = _propDesc.GetValue( y );
 			int retValue = 0;
-			if( xValue is IComparable ) {   //can ask the x value
-				retValue = ((IComparable)xValue).CompareTo( yValue );
-			} else if( yValue is IComparable ) {    //can ask the y value
-				retValue = ((IComparable)yValue).CompareTo( xValue );
+			if( null == yValue ) {
+				if( null != xValue ) {
+					retValue = 1;
+				} else {
+					retValue = 0;
+				}
+			} else if( null == xValue ) {
+				if( null != yValue ) {
+					retValue = -1;
+				} else {
+					retValue = 0;
+				}
+			} else if( xValue is IComparable ) {   //can ask the x value
+				retValue = (xValue as IComparable).CompareTo( yValue );
 			} else if( !xValue.Equals( yValue ) ) { //not comparable, compare string representations
-				retValue = System.String.Compare( xValue.ToString( ), yValue.ToString( ), System.StringComparison.OrdinalIgnoreCase );
+				var strX = xValue.ToString( );
+				var strY = yValue.ToString( );
+				retValue = System.String.Compare( strX, strY, System.StringComparison.OrdinalIgnoreCase );
 			}
 
-			if( ListSortDirection.Descending == direction ) {
+			if( ListSortDirection.Descending == _direction ) {
 				retValue *= -1;
 			}
 
