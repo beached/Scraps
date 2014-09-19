@@ -8,13 +8,10 @@ namespace SyncList {
 		}
 
 		public static DataGridViewColumn MakeLinkColumn( string name, string headerName, bool hidden = false, bool canSort = true, bool readOnly = true ) {
-			var cellTemplate = new DataGridViewLinkCell( );
-			cellTemplate.TrackVisitedState = false;
-			cellTemplate.UseColumnTextForLinkValue = true;
-			cellTemplate.LinkBehavior = LinkBehavior.NeverUnderline;
+			var cellTemplate = new DataGridViewLinkCell {TrackVisitedState = false, UseColumnTextForLinkValue = true, LinkBehavior = LinkBehavior.NeverUnderline};
 			var col = MakeColumn( name, headerName, hidden, canSort, readOnly );
-			col.DefaultCellStyle.NullValue = string.Empty;
 			col.CellTemplate = cellTemplate;
+			col.DefaultCellStyle.NullValue = string.Empty;			
 			return col;
 		}
 

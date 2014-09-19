@@ -26,7 +26,7 @@ namespace daw.Collections {
 		public SyncList( ISynchronizeInvoke syncObject, IEnumerable<T> values = null ) {
 			if( values != null ) {
 				foreach( T value in values ) {
-					this.Items.Add( value );
+					Items.Add( value );
 				}
 			}
 			_syncObject = syncObject;
@@ -35,9 +35,9 @@ namespace daw.Collections {
 
 
 		// Sort Stuff
-		private bool _isSorted = false;
+		private bool _isSorted;
 		private ListSortDirection _sortDirection = ListSortDirection.Ascending;
-		private PropertyDescriptor _sortProperty = null;
+		private PropertyDescriptor _sortProperty;
 
 		public bool SupportsAdvancedSorting {
 			get { return false; }
@@ -77,7 +77,7 @@ namespace daw.Collections {
 			_sortDirection = direction;
 			_sortProperty = prop;
 
-			var listRef = this.Items as List<T>;
+			var listRef = Items as List<T>;
 			if( null == listRef ) {
 				return;
 			}
@@ -124,7 +124,7 @@ namespace daw.Collections {
 			Filter = null;
 		}
 
-		private string _filterValue = null;
+		private string _filterValue;
 
 		public string Filter {
 			get { return _filterValue; }
@@ -149,7 +149,7 @@ namespace daw.Collections {
 					var matches = value.Split( new string[] { " AND " }, StringSplitOptions.RemoveEmptyEntries );
 
 					while( count < matches.Length ) {
-						var filterPart = matches[count].ToString( );
+						var filterPart = matches[count];
 
 						// Check to see if the filter was set previously.
 						// Also, check if current filter is a subset of 
@@ -171,9 +171,9 @@ namespace daw.Collections {
 		}
 
 		private void ResetList( ) {
-			this.ClearItems( );
+			ClearItems( );
 			foreach( var t in _originalListValue ) {
-				this.Items.Add( t );
+				Items.Add( t );
 			}
 
 			if( IsSortedCore && null != SortPropertyCore ) {
@@ -191,9 +191,9 @@ namespace daw.Collections {
 			if( e.ListChangedType == ListChangedType.ItemAdded ) {
 				OriginalList.Add( this[e.NewIndex] );
 				if( !String.IsNullOrEmpty( Filter ) ) {
-					var cachedFilter = this.Filter;
-					this.Filter = string.Empty;
-					this.Filter = cachedFilter;
+					var cachedFilter = Filter;
+					Filter = string.Empty;
+					Filter = cachedFilter;
 				}
 			}
 			// Remove the new item from the original list.
@@ -247,21 +247,20 @@ namespace daw.Collections {
 					continue;
 				}
 				var compareValue = filterParts.PropDesc.GetValue( item ) as IComparable;
-				if( null == compareValue && null == filterParts.CompareValue ) {
-					continue;
-				}
-				var result = compareValue.CompareTo( filterParts.CompareValue );
-				if( filterParts.OperatorValue == FilterOperator.EqualTo && result == 0 ) {
-					results.Add( item );
-				} else if( filterParts.OperatorValue == FilterOperator.GreaterThan && result > 0 ) {
-					results.Add( item );
-				} else if( filterParts.OperatorValue == FilterOperator.LessThan && result < 0 ) {
-					results.Add( item );
+				if( null != compareValue && null != filterParts.CompareValue ) {
+					var result = compareValue.CompareTo( filterParts.CompareValue );
+					if( filterParts.OperatorValue == FilterOperator.EqualTo && result == 0 ) {
+						results.Add( item );
+					} else if( filterParts.OperatorValue == FilterOperator.GreaterThan && result > 0 ) {
+						results.Add( item );
+					} else if( filterParts.OperatorValue == FilterOperator.LessThan && result < 0 ) {
+						results.Add( item );
+					}
 				}
 			}
-			this.ClearItems( );
+			ClearItems( );
 			foreach( var itemFound in results ) {
-				this.Add( itemFound );
+				Add( itemFound );
 			}
 
 		}
@@ -269,10 +268,9 @@ namespace daw.Collections {
 		internal SingleFilterInfo ParseFilter( string filterPart ) {
 			Debug.Assert( !string.IsNullOrEmpty( filterPart ), "filterPart cannot be null" );
 
-			var filterInfo = new SingleFilterInfo( );
-			filterInfo.OperatorValue = DetermineFilterOperator( filterPart );
+			var filterInfo = new SingleFilterInfo {OperatorValue = DetermineFilterOperator( filterPart )};
 
-			var filterStringParts = null == filterPart ? string.Empty.Split( ) : filterPart.Split( new char[] { (char)filterInfo.OperatorValue } );
+			var filterStringParts = filterPart.Split( new char[] { (char)filterInfo.OperatorValue } );
 
 			filterInfo.PropName = filterStringParts[0].Replace( "[", "" ).Replace( "]", "" ).Replace( " AND ", "" ).Trim( );
 
@@ -290,7 +288,7 @@ namespace daw.Collections {
 				TypeConverter converter = TypeDescriptor.GetConverter( filterPropDesc.PropertyType );
 				filterInfo.CompareValue = converter.ConvertFromString( comparePartNoQuotes );
 			} catch( NotSupportedException ) {
-				throw new InvalidOperationException( string.Format( "Specified filter value {0} can not be converted from string. Implement a type converter for {1}", comparePartNoQuotes, filterPropDesc.PropertyType.ToString( ) ) );
+				throw new InvalidOperationException( string.Format( "Specified filter value {0} can not be converted from string. Implement a type converter for {1}", comparePartNoQuotes, filterPropDesc.PropertyType ) );
 			}
 			return filterInfo;
 		}
@@ -299,9 +297,11 @@ namespace daw.Collections {
 			// Determine the filter's operator.
 			if( Regex.IsMatch( filterPart, "[^>^<]=" ) ) {
 				return FilterOperator.EqualTo;
-			} else if( Regex.IsMatch( filterPart, "<[^>^=]" ) ) {
+			}
+			if( Regex.IsMatch( filterPart, "<[^>^=]" ) ) {
 				return FilterOperator.LessThan;
-			} else if( Regex.IsMatch( filterPart, "[^<]>[^=]" ) ) {
+			}
+			if( Regex.IsMatch( filterPart, "[^<]>[^=]" ) ) {
 				return FilterOperator.GreaterThan;
 			}
 			return FilterOperator.None;
@@ -338,24 +338,17 @@ namespace daw.Collections {
 			var xValue = _propDesc.GetValue( x );
 			var yValue = _propDesc.GetValue( y );
 			int retValue = 0;
-			if( null == yValue ) {
-				if( null != xValue ) {
-					retValue = 1;
-				} else {
-					retValue = 0;
-				}
-			} else if( null == xValue ) {
-				if( null != yValue ) {
-					retValue = -1;
-				} else {
-					retValue = 0;
-				}
+
+			if( null == xValue ) {
+				retValue = null == yValue ? 0 : -1;
+			} else if( null == yValue ) {
+				retValue = 1;
 			} else if( xValue is IComparable ) {   //can ask the x value
 				retValue = (xValue as IComparable).CompareTo( yValue );
 			} else if( !xValue.Equals( yValue ) ) { //not comparable, compare string representations
 				var strX = xValue.ToString( );
 				var strY = yValue.ToString( );
-				retValue = System.String.Compare( strX, strY, System.StringComparison.OrdinalIgnoreCase );
+				retValue = string.Compare( strX, strY, StringComparison.OrdinalIgnoreCase );
 			}
 
 			if( ListSortDirection.Descending == _direction ) {
