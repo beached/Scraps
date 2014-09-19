@@ -1,5 +1,6 @@
 ﻿// Quickly pulled this togethor from several sources and myself to get a databinding class that automatically invokes and also support filtering and searching.  May not fully work
 // 
+
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -7,7 +8,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace daw.Collections {
+namespace SyncList {
 	public class SyncList<T>: BindingList<T>, IBindingListView {
 
 		// Invoke stuff for threaded forms
@@ -15,7 +16,7 @@ namespace daw.Collections {
 		private Action<ListChangedEventArgs> _fireEventAction;
 
 		private readonly List<T> _originalListValue = new List<T>( );
-		public List<T> OriginalList {
+		public IEnumerable<T> OriginalList {
 			get { return _originalListValue; }
 		}
 
@@ -89,12 +90,12 @@ namespace daw.Collections {
 			OnListChanged( new ListChangedEventArgs( ListChangedType.Reset, -1 ) );
 		}
 
-
 		private void FireEvent( ListChangedEventArgs args ) {
 			base.OnListChanged( args );
 		}
 
 		protected override int FindCore( PropertyDescriptor prop, object key ) {
+			Debug.Assert( null != prop, @"Unexpected null in FindCore prop" );
 			if( null == key ) {
 				return -1;
 			}
@@ -135,7 +136,7 @@ namespace daw.Collections {
 
 				// If the value is not null or empty, but doesn't
 				// match expected format, throw an exception.
-				if( !String.IsNullOrEmpty( value ) && !Regex.IsMatch( value, BuildRegExForFilterFormat( ), RegexOptions.Singleline ) ) {
+				if( !String.IsNullOrEmpty( value ) && !Regex.IsMatch( value, BuildRegexForFilterFormat( ), RegexOptions.Singleline ) ) {
 					throw new ArgumentException( "Filter is not in the format: propName[<>=]'value'." );
 				}
 				//Turn off list-changed events.
@@ -146,7 +147,7 @@ namespace daw.Collections {
 					ResetList( );
 				} else {
 					var count = 0;
-					var matches = value.Split( new string[] { " AND " }, StringSplitOptions.RemoveEmptyEntries );
+					var matches = value.Split( new[] { " AND " }, StringSplitOptions.RemoveEmptyEntries );
 
 					while( count < matches.Length ) {
 						var filterPart = matches[count];
@@ -184,12 +185,13 @@ namespace daw.Collections {
 		protected override void OnListChanged( ListChangedEventArgs e ) {
 			// If the list is reset, check for a filter. If a filter 
 			// is applied don't allow items to be added to the list.
+			Debug.Assert( null != e, @"Unexpected null in OnListChanged ListChangedEventArgs" );
 			if( e.ListChangedType == ListChangedType.Reset ) {
 				AllowNew = string.IsNullOrEmpty( Filter );
 			}
 			// Add the new item to the original list.
 			if( e.ListChangedType == ListChangedType.ItemAdded ) {
-				OriginalList.Add( this[e.NewIndex] );
+				_originalListValue.Add( this[e.NewIndex] );
 				if( !String.IsNullOrEmpty( Filter ) ) {
 					var cachedFilter = Filter;
 					Filter = string.Empty;
@@ -198,7 +200,7 @@ namespace daw.Collections {
 			}
 			// Remove the new item from the original list.
 			if( e.ListChangedType == ListChangedType.ItemDeleted ) {
-				OriginalList.RemoveAt( e.NewIndex );
+				_originalListValue.RemoveAt( e.NewIndex );
 			}
 
 			if( null == _syncObject ) {
@@ -212,7 +214,7 @@ namespace daw.Collections {
 			}
 		}
 
-		public static String BuildRegExForFilterFormat( ) {
+		private String BuildRegexForFilterFormat( ) {
 			var regex = new StringBuilder( );
 
 			// Look for optional literal brackets, 
@@ -270,7 +272,7 @@ namespace daw.Collections {
 
 			var filterInfo = new SingleFilterInfo {OperatorValue = DetermineFilterOperator( filterPart )};
 
-			var filterStringParts = filterPart.Split( new char[] { (char)filterInfo.OperatorValue } );
+			var filterStringParts = filterPart.Split( new[] { (char)filterInfo.OperatorValue } );
 
 			filterInfo.PropName = filterStringParts[0].Replace( "[", "" ).Replace( "]", "" ).Replace( " AND ", "" ).Trim( );
 

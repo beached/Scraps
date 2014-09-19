@@ -23,7 +23,7 @@ namespace SyncList {
 		}
 
 		public static DataGridViewColumn MakeDateColumn( string name, string headerName, bool hidden = false, bool canSort = true, string dateFormat = null, bool readOnly = true ) {
-			var col = MakeColumn( @"InstallDate", @"Install Date", hidden, canSort, readOnly );
+			var col = MakeColumn( name, headerName, hidden, canSort, readOnly );
 			col.DefaultCellStyle.Format = string.IsNullOrEmpty( dateFormat ) ? @"yyyy/MM/dd": dateFormat;
 			return col;
 		}
