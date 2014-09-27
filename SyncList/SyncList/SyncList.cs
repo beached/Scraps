@@ -13,17 +13,14 @@ namespace SyncList {
 
 		// Invoke stuff for threaded forms
 		private readonly ISynchronizeInvoke _syncObject;
-		private Action<ListChangedEventArgs> _fireEventAction;
+		//private Action<ListChangedEventArgs> _fireEventAction;
 
 		private readonly List<T> _originalListValue = new List<T>( );
 		public IEnumerable<T> OriginalList {
 			get { return _originalListValue; }
 		}
 
-		public SyncList( ): this( null ) {
-		}
-
-		
+		public SyncList( ): this( null ) { }		
 		public SyncList( ISynchronizeInvoke syncObject, IEnumerable<T> values = null ) {
 			if( values != null ) {
 				foreach( T value in values ) {
@@ -31,9 +28,8 @@ namespace SyncList {
 				}
 			}
 			_syncObject = syncObject;
-			_fireEventAction = FireEvent;
+			//_fireEventAction = FireEvent;
 		}
-
 
 		// Sort Stuff
 		private bool _isSorted;
@@ -182,6 +178,28 @@ namespace SyncList {
 			}
 		}
 
+		public void AddRange( IEnumerable<T> values ) {
+			lock( this ) {
+				foreach( var value in values ) {
+					Add( value );
+				}
+			}
+		}
+
+		public void LockedAdd( T value ) {
+			lock( this ) {
+				base.Add( value );				
+			}
+		}
+
+		public void Add( T value, bool useLock = false ) {
+			if( useLock ) {
+				LockedAdd( value );
+			} else {
+				base.Add( value );
+			}
+		}
+
 		protected override void OnListChanged( ListChangedEventArgs e ) {
 			// If the list is reset, check for a filter. If a filter 
 			// is applied don't allow items to be added to the list.
@@ -214,7 +232,7 @@ namespace SyncList {
 			}
 		}
 
-		private String BuildRegexForFilterFormat( ) {
+		private static String BuildRegexForFilterFormat( ) {
 			var regex = new StringBuilder( );
 
 			// Look for optional literal brackets, 
