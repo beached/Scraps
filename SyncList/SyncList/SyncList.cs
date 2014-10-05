@@ -10,17 +10,19 @@ using System.Text.RegularExpressions;
 
 namespace SyncList {
 	public class SyncList<T>: BindingList<T>, IBindingListView {
-
-		// Invoke stuff for threaded forms
 		private readonly ISynchronizeInvoke _syncObject;
-		//private Action<ListChangedEventArgs> _fireEventAction;
-
 		private readonly List<T> _originalListValue = new List<T>( );
+		private bool _isSorted;
+		private ListSortDirection _sortDirection = ListSortDirection.Ascending;
+		private PropertyDescriptor _sortProperty;
+		private string _filterValue;
+		
 		public IEnumerable<T> OriginalList {
 			get { return _originalListValue; }
 		}
 
 		public SyncList( ): this( null ) { }		
+
 		public SyncList( ISynchronizeInvoke syncObject, IEnumerable<T> values = null ) {
 			if( values != null ) {
 				foreach( T value in values ) {
@@ -28,14 +30,9 @@ namespace SyncList {
 				}
 			}
 			_syncObject = syncObject;
-			//_fireEventAction = FireEvent;
 		}
 
 		// Sort Stuff
-		private bool _isSorted;
-		private ListSortDirection _sortDirection = ListSortDirection.Ascending;
-		private PropertyDescriptor _sortProperty;
-
 		public bool SupportsAdvancedSorting {
 			get { return false; }
 		}
@@ -121,8 +118,6 @@ namespace SyncList {
 			Filter = null;
 		}
 
-		private string _filterValue;
-
 		public string Filter {
 			get { return _filterValue; }
 			set {
@@ -200,6 +195,26 @@ namespace SyncList {
 			}
 		}
 
+		public void RemoveAll( Predicate<T> pred, bool useLock = false ) {
+			var valuesToRemove = new List<int>( );
+			for( var row = base.Count - 1; row >= 0; --row ) {
+				if( pred( Items[row] ) ) {
+					valuesToRemove.Add( row );
+				}
+			}
+			if( useLock ) {
+				lock( this ) {
+					foreach( var row in valuesToRemove ) {
+						RemoveAt( row );
+					}
+				}
+			} else {
+				foreach( var row in valuesToRemove ) {
+					RemoveAt( row );
+				}				
+			}
+		}
+
 		protected override void OnListChanged( ListChangedEventArgs e ) {
 			// If the list is reset, check for a filter. If a filter 
 			// is applied don't allow items to be added to the list.
@@ -267,15 +282,16 @@ namespace SyncList {
 					continue;
 				}
 				var compareValue = filterParts.PropDesc.GetValue( item ) as IComparable;
-				if( null != compareValue && null != filterParts.CompareValue ) {
-					var result = compareValue.CompareTo( filterParts.CompareValue );
-					if( filterParts.OperatorValue == FilterOperator.EqualTo && result == 0 ) {
-						results.Add( item );
-					} else if( filterParts.OperatorValue == FilterOperator.GreaterThan && result > 0 ) {
-						results.Add( item );
-					} else if( filterParts.OperatorValue == FilterOperator.LessThan && result < 0 ) {
-						results.Add( item );
-					}
+				if( null == compareValue || null == filterParts.CompareValue ) {
+					continue;
+				}
+				var result = compareValue.CompareTo( filterParts.CompareValue );
+				if( filterParts.OperatorValue == FilterOperator.EqualTo && result == 0 ) {
+					results.Add( item );
+				} else if( filterParts.OperatorValue == FilterOperator.GreaterThan && result > 0 ) {
+					results.Add( item );
+				} else if( filterParts.OperatorValue == FilterOperator.LessThan && result < 0 ) {
+					results.Add( item );
 				}
 			}
 			ClearItems( );
