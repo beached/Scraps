@@ -23,6 +23,11 @@ namespace daw {
 		struct make_member_function_pointer_impl {
 			typedef ResultType (ClassType::*type)(ArgTypes...);
 		};
+
+		template<typename ResultType, typename ClassType, typename... ArgTypes>
+		struct make_const_member_function_pointer_impl {
+			typedef ResultType(ClassType::*type)(ArgTypes...) const;
+		};
 	}	// namespace impl
 
 	// Create a pointer type to a member function pointer of the form
@@ -34,6 +39,16 @@ namespace daw {
 	// member_function_pointer_t<int, A, int, int, double> fp = &A::blab;
 	template<typename ResultType, typename ClassType, typename... ArgTypes>
 	using member_function_pointer_t = typename impl::make_member_function_pointer_impl<ResultType, ClassType, ArgTypes...>::type;
+
+	// Create a pointer type to a const member function pointer of the form
+	// Resulttype functionName( ArgsTypes ) const
+	// e.g.
+	// struct A {
+	// 	int blah( int, int, double ) const { return 1; }
+	// };
+	// member_function_pointer_t<int, A, int, int, double> fp = &A::blab;
+	template<typename ResultType, typename ClassType, typename... ArgTypes>
+	using const_member_function_pointer_t = typename impl::make_const_member_function_pointer_impl<ResultType, ClassType, ArgTypes...>::type;
 
 
 }	// namespace daw
