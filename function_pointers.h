@@ -21,12 +21,12 @@ namespace daw {
 	namespace impl {
 		template<typename ResultType, typename ClassType, typename... ArgTypes>
 		struct make_member_function_pointer_impl {
-			typedef ResultType (ClassType::*type)(ArgTypes...);
+			using type = ResultType(ClassType::*)(ArgTypes...);
 		};
 
 		template<typename ResultType, typename ClassType, typename... ArgTypes>
 		struct make_const_member_function_pointer_impl {
-			typedef ResultType(ClassType::*type)(ArgTypes...) const;
+			using type = ResultType(ClassType::*)(ArgTypes...) const;
 		};
 	}	// namespace impl
 
