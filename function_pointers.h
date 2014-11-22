@@ -1,7 +1,8 @@
 #pragma once
 
 #include <type_traits>
-
+// Examples of using templates to generate function pointers.  Did not go into volatile but that
+// is easy and requires const volatile and volatile.  These are very rare though
 namespace daw {
 	namespace impl {
 		template<typename ResultType, typename... ArgTypes>
